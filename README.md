@@ -1,8 +1,7 @@
-![image.png](attachment:d934ea8f-e028-42cf-9877-d80fc2883431:image.png)
+## AWS_DeepRacer 경진대회
 
-![IMG_0679.jpeg](attachment:c9263dd1-c3f9-4444-be41-e62c8e38a5d8:IMG_0679.jpeg)
+![image](https://github.com/user-attachments/assets/9e94c3ea-65d0-4c5a-ad90-2ccc67cb5aa9)
 
-![IMG_0806.jpeg](attachment:aa136496-9803-42b2-a97f-e1682d4c834d:IMG_0806.jpeg)
 
 2024.12 ~ 2025.02 (3개월)
 
@@ -19,7 +18,11 @@ AWS DeepRacer를 활용한 인공지능 강화학습 기반의 자율주행 자�
 
 <모의 주행 테스트 영상>
 
-[모의 주행 영상.mp4](attachment:89bce07d-1de9-42a4-b1bd-cc7b550840f8:모의_주행_영상.mp4)
+
+
+https://github.com/user-attachments/assets/1e4781c5-095d-48cf-8009-3d4356a5324a
+
+
 
 ## 주요 기능
 
