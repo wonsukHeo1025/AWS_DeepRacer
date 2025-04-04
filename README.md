@@ -11,8 +11,6 @@ AWS DeepRacer를 활용한 인공지능 강화학습 기반의 자율주행 자�
     - 오프라인 RC카에도 적용해 실제 자율주행 검증
 - 역할: Waypoint 기반 주행 로직 및 차량 제어, Reward Function 설계 및 성능 최적화, API 기반 throttle/steering 제어 및 실시간 status 모니터링
 
-![image](https://github.com/user-attachments/assets/6f2b390e-6c73-46eb-8dfa-9182e4ea444d)
-
 
 ## 프로젝트 소개 영상
 
