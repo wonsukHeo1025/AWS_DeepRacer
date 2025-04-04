@@ -107,7 +107,7 @@ def reward_function(params):
 
 ## **담당역할: Fast Track 및 하드웨어 담당**
 
-- Fast Track 웨이포인트, 액션 스페이스, reward function 작성
+- Fast Track 웨이포인트, reward function 작성
 - 차량 제어 담당
 
 ## **프로젝트 성과**
