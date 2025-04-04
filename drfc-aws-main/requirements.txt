@@ -1,0 +1,2 @@
+aicastle[deepracer-drfc]
+ipykernel

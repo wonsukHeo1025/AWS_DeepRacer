@@ -1,0 +1,7 @@
+venv/
+data/
+test/
+test*
+.env
+saved_data/
+__pycache__/

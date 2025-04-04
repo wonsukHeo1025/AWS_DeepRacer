@@ -1,0 +1,6 @@
+aicastle[deepracer-vehicle]
+ipykernel
+# matplotlib
+
+# openai
+# ollama
