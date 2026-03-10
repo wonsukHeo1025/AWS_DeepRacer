@@ -301,12 +301,3 @@ drfc.set_model_metadata({
 https://github.com/user-attachments/assets/1e4781c5-095d-48cf-8009-3d4356a5324a
 
 
-
-## 프로젝트 영상
-
-<주행 테스트 영상>
-
-
-
-https://github.com/user-attachments/assets/1e4781c5-095d-48cf-8009-3d4356a5324a
-
