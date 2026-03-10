@@ -4,12 +4,12 @@
 
 이 저장소는 AWS DeepRacer 경진대회 워크스페이스에서 제가 직접 담당한 `reward_function.py` 설계와 튜닝 과정을 정리한 포트폴리오 문서입니다.
 
-프로젝트 전체에는 클라우드 학습 인프라, 차량 API, 하드웨어 적용 실험이 함께 포함되어 있지만, 제 담당 범위는 `drfc-aws-main/reward_function.py`를 중심으로 한 보상함수 설계와 그에 맞춘 주행 로직 최적화였습니다.
+프로젝트 전체에는 클라우드 학습 인프라, 차량 API, 하드웨어 적용 실험이 함께 포함되어 있지만, 제 담당 범위는 보상함수 설계였습니다.
 
 제가 설계한 최종 보상함수는 다음 두 접근을 결합한 결과입니다.
 
-- `yj`의 A* + 휴리스틱 기반 최적화 트랙 주행 로직
-- `jh`의 AWS 기본 Object Avoidance 코드 변형 + 차선 변경 보상 로직
+- A* + 휴리스틱 기반 최적화 트랙 주행 로직
+- AWS 기본 Object Avoidance 코드 변형 + 차선 변경 보상 로직
 
 이 두 접근을 합쳐 최적 레이싱 라인을 안정적으로 따라가면서도 장애물을 회피할 수 있는 보상함수로 정리했고, 해당 세팅으로 장려상을 수상했습니다. 실차 기준 `set_speed = 65`에서 안정적으로 주행 가능했고, 랩타임은 대략 12초대였으며, 실험 로그 기준 최고 기록은 `00:11.5`까지 확인했습니다.
 
@@ -24,6 +24,7 @@
 ## 담당 범위 제외
 
 아래 항목들은 저장소에 포함되어 있지만 제 직접 담당 범위는 아니었습니다.
+(대부분 실험적인 내용)
 
 - EC2, S3, IAM 등 DRfC 클라우드 인프라 운영
 - 학습 인스턴스 기동 및 배포 자동화
@@ -39,23 +40,6 @@
 - steering 오차를 줄여 zig-zag를 줄이고 progress를 안정적으로 확보
 - discrete action space와 결합해 corner와 obstacle 상황에 맞는 속도 선택 유도
 
-## End-To-End 파이프라인
-
-```mermaid
-flowchart LR
-    A[AWS Track NPY] --> B[A* + Heuristic Racing Line Search]
-    B --> C[Optimized Waypoints]
-    D[AWS Object Avoidance Baseline Logic] --> E[Obstacle Avoidance Reward]
-    F[Lane Change Reward Design] --> E
-    C --> G[Track Following Reward]
-    E --> H[Final reward_function.py]
-    G --> H
-    I[Discrete Action Space] --> J[DRfC Training]
-    H --> J
-    J --> K[Evaluation]
-    K --> L[Real Vehicle Test]
-    L --> M["set_speed = 65, stable driving, ~12s lap"]
-```
 
 ## 주요 기능
 
@@ -226,9 +210,6 @@ drfc.set_model_metadata({
 - AWS DeepRacer
 - DeepRacer for Cloud (DRfC)
 - Python
-- Jupyter Notebook
-- NumPy
-- Shapely
 - A* Search
 - Heuristic Path Planning
 - Reinforcement Learning Reward Design
@@ -236,7 +217,6 @@ drfc.set_model_metadata({
 ## 결과
 
 - 2024 AWS DeepRacer 챔피언십 리그 장려상
-- 최종 제출 모델 `integrated1` 선정
 - 최종 보상함수 설계 및 튜닝 완료
 - 최고 기록 `00:11.5` 확인
 - `set_speed = 65`에서 안정적 주행 확인
