@@ -2,82 +2,231 @@
 
 ## 개요
 
-이 저장소는 AWS DeepRacer 경진대회 워크스페이스에서 제가 직접 담당한 `reward_function.py` 설계와 튜닝 과정을 정리한 포트폴리오 문서입니다.
+이 저장소는 AWS DeepRacer 경진대회 워크스페이스 중 제가 직접 담당한 `reward_function.py` 설계와 튜닝 과정을 정리한 포트폴리오 문서입니다.
 
-프로젝트 전체에는 클라우드 학습 인프라, 차량 API, 하드웨어 적용 실험이 함께 포함되어 있지만, 제 담당 범위는 보상함수 설계였습니다.
+프로젝트 전체에는 클라우드 학습 인프라, 차량 API, 하드웨어 실험, 경로 최적화 실험이 함께 포함되어 있지만, 제 담당 범위는 오직 [`drfc-aws-main/reward_function.py`](drfc-aws-main/reward_function.py) 설계였습니다.
 
-제가 설계한 최종 보상함수는 다음 두 접근을 결합한 결과입니다.
+중요한 점은 다음과 같습니다.
 
-- A* + 휴리스틱 기반 최적화 트랙 주행 로직
-- AWS 기본 Object Avoidance 코드 변형 + 차선 변경 보상 로직
+- 최적 경로 생성, A* 경로 탐색, 레이싱 라인 계산은 제 담당이 아니었습니다.
+- 저는 팀원이 만든 최적 레이싱 라인 결과와 AWS 기본 Object Avoidance 구조를 받아, 이를 실제 대회용 보상함수로 통합하고 튜닝하는 역할을 맡았습니다.
+- 최종적으로 장애물 회피와 안정적인 라인 추종을 동시에 만족하는 보상함수를 설계했고, 해당 세팅으로 장려상을 수상했습니다.
 
-이 두 접근을 합쳐 최적 레이싱 라인을 안정적으로 따라가면서도 장애물을 회피할 수 있는 보상함수로 정리했고, 해당 세팅으로 장려상을 수상했습니다. 실차 기준 `set_speed = 65`에서 안정적으로 주행 가능했고, 랩타임은 대략 12초대였으며, 실험 로그 기준 최고 기록은 `00:11.5`까지 확인했습니다.
+실험 로그 기준 최고 기록은 `00:11.5`였고, 실차 기준 `set_speed = 65`에서 안정적으로 주행했으며 실제 랩타임은 대략 12초대였습니다.
 
 ## 담당 범위
 
 | 영역 | 파일 | 구현한 내용 |
 |---|---|---|
-| Reward Design | [`drfc-aws-main/reward_function.py`](drfc-aws-main/reward_function.py) | 최종 대회용 보상함수 설계, 최적 경로 추종 보상, 장애물 회피 보상, 차선 변경 보상 로직 통합 |
-| Reward Research | [`aws_obj/obj_astar_reward.ipynb`](aws_obj/obj_astar_reward.ipynb) | 트랙 `.npy` 분석, A* + 휴리스틱 기반 레이싱 라인 탐색, 속도 프로파일 실험, 보상함수 프로토타이핑 |
-| Training Spec | [`drfc-aws-main/02_Setup.ipynb`](drfc-aws-main/02_Setup.ipynb) | 보상함수와 함께 사용할 discrete action space 및 학습 메타데이터 정리 |
+| Reward Function Design | [`drfc-aws-main/reward_function.py`](drfc-aws-main/reward_function.py) | Object Avoidance 대회용 최종 보상함수 설계, 레이싱 라인 추종 보상과 장애물 회피 보상의 통합, 장애물별 좌우 위치 유도 로직 설계, reward weight 및 조건 튜닝 |
 
 ## 담당 범위 제외
 
-아래 항목들은 저장소에 포함되어 있지만 제 직접 담당 범위는 아니었습니다.
-(대부분 실험적인 내용)
+아래 항목들은 프로젝트에는 포함되어 있지만 제 직접 담당 범위는 아니었습니다.
 
-- EC2, S3, IAM 등 DRfC 클라우드 인프라 운영
-- 학습 인스턴스 기동 및 배포 자동화
-- 차량 API 튜토리얼 및 별도 하드웨어 제어 실험
-- GPT / Ollama 기반 실험 노트북
-
-## 시스템 목표
-
-이 보상함수는 AWS DeepRacer의 Object Avoidance 환경에서 다음 목표를 동시에 만족하도록 설계되었습니다.
-
-- A*와 휴리스틱으로 얻은 최적 레이싱 라인을 최대한 안정적으로 추종
-- 장애물 구간에서 단순 감속이 아니라 안전한 차선 변경 유도
-- steering 오차를 줄여 zig-zag를 줄이고 progress를 안정적으로 확보
-- discrete action space와 결합해 corner와 obstacle 상황에 맞는 속도 선택 유도
+- A* 기반 경로 최적화 및 레이싱 라인 생성
+- 트랙 `.npy` 분석 및 최적 waypoint 산출
 
 
-## 주요 기능
+## 역할 분담
 
-### 1. A* 기반 최적 레이싱 라인 추종
+역할 분담을 명확히 하기 위해, 보상함수와 외부 입력을 구분해서 설명합니다.
 
-- DeepRacer 트랙 `.npy` 데이터에서 중심선과 경계 정보를 읽어 주행 가능한 레이싱 라인을 구성
-- A*와 휴리스틱을 사용해 더 빠르고 안정적인 경로를 탐색
-- 최종 보상함수에서는 현재 차량 위치 기준 목표 waypoint를 바라보도록 구성하여 steering 오차를 줄이도록 설계
+- `racing_track` 좌표 자체는 팀원이 생성한 최적 경로 결과입니다.
+- 저는 그 좌표를 직접 생성한 것이 아니라, 보상함수 안에서 어떻게 점수화할지 설계했습니다.
+- 즉, 제 역할은 경로를 만드는 것이 아니라 그 경로를 얼마나 잘 따라가고, 장애물을 얼마나 안정적으로 피하는지를 reward로 정의하는 것이었습니다.
 
-### 2. 장애물 회피 보상
+## reward_function.py 설계 목표
 
-- AWS에서 기본 제공하는 Object Avoidance 보상 구조를 그대로 쓰지 않고 트랙 특성에 맞게 수정
-- 장애물 위치와 차선 상황을 고려해 더 자연스럽게 회피하도록 보상 항목 조정
-- 단순 off-track 방지 수준이 아니라 실제 주행 품질을 높이는 방향으로 튜닝
+제가 설계한 보상함수는 AWS DeepRacer Object Avoidance 환경에서 아래 목표를 동시에 만족하도록 구성되었습니다.
 
-### 3. 차선 변경 보상 추가
+- 팀원이 만든 최적 레이싱 라인을 안정적으로 따라가도록 유도
+- obstacle 상황에서 단순 감속이 아니라 충돌 가능성이 낮은 좌우 위치를 보상으로 유도
+- 차량이 라인에서 멀어지거나 heading이 크게 틀어졌을 때 과감하게 패널티 부여
+- 속도와 라인 추종 사이의 균형을 맞춰 실제 차량에서도 재현 가능하도록 유도
 
-- 장애물 회피 시 lane choice를 더 명확하게 유도하기 위해 차선 변경 관련 보상 항목 추가
-- 회피 후 다시 안정적인 주행 라인으로 복귀하도록 설계
-- obstacle 구간에서 steering이 과도하게 흔들리는 문제를 줄이는 데 초점을 둠
+## reward_function.py 상세 설명
 
-### 4. Action Space와의 공동 최적화
+현재 [`drfc-aws-main/reward_function.py`](drfc-aws-main/reward_function.py)는 크게 6개의 층으로 구성됩니다.
 
-- 보상함수만 따로 튜닝하지 않고 discrete action space와 함께 조정
-- 직선에서는 빠른 속도 선택이 가능하고, 급코너 및 회피 구간에서는 낮은 속도와 큰 steering 조합이 가능하도록 구성
-- reward와 action distribution을 함께 맞춰 실제 차량에서도 안정성을 확보
+### 1. 기하 계산 보조 함수
+
+보상함수 앞부분에는 거리, 선분과의 거리, 방향 차이 계산을 위한 helper function이 들어 있습니다.
+
+- 두 점 사이 유클리드 거리 계산
+- 차량과 레이싱 라인 사이의 수직거리 계산
+- 차량 heading과 레이싱 라인 진행 방향 차이 계산
+- 장애물과 차량의 거리 계산
+
+이 부분은 reward의 기반이 되는 측정 계층입니다.
+
+### 2. 레이싱 라인 입력
+
+보상함수 내부에는 `racing_track = [[x, y, optimal_speed, heading], ...]` 형태의 좌표 배열이 들어 있습니다.
+
+- `x, y`: 기준 레이싱 라인 위치
+- `optimal_speed`: 해당 구간에서 목표 속도
+- `heading`: 해당 구간의 진행 방향 정보
+
+이 배열은 제가 생성한 경로가 아니라, 팀원이 만든 최적 경로 결과를 reward에 반영하기 위해 사용한 입력 데이터입니다.
+
+### 3. 기본 보상과 진행률 보상
+
+보상은 먼저 기본값 `1.0`에서 시작하고, 여기에 `progress / 100.0`을 더합니다.
+
+- 완주 전에도 progress가 오를수록 조금씩 보상이 증가
+- 초반 학습에서 아무것도 못 배우는 상태를 줄이고, 전진 자체에 대한 최소한의 학습 신호를 주기 위한 구성
+
+즉, 이 보상은 “일단 앞으로 가는 것” 자체를 전혀 무시하지 않도록 만든 안전장치입니다.
+
+### 4. 레이싱 라인 추종 보상
+
+레이싱 라인 보상은 차량이 현재 어느 정도 정확하게 최적 라인을 따라가고 있는지를 계산합니다.
+
+- 현재 차량과 가장 가까운 레이싱 라인 포인트 2개를 찾음
+- 그 두 점이 이루는 선분과 차량 위치 사이의 거리를 계산
+- 차량이 레이싱 라인에 가까울수록 더 큰 보상을 부여
+
+현재 코드에서는 아래 형태로 반영됩니다.
+
+```python
+reward += max(1e-3, 1.0 - (distance_line / (track_width * 0.5))) * 1.3
+```
+
+이 항목의 목적은 차가 중앙선 근처가 아니라 최적 주행 라인 근처를 유지하게 만드는 것입니다.
+
+### 5. 최적 속도 보상
+
+레이싱 라인 각 포인트에는 목표 속도가 함께 들어 있습니다. 보상함수는 현재 차량 속도와 이 목표 속도의 차이를 비교해 속도 보상을 추가합니다.
+
+```python
+reward += max(1e-3, 1.0 - (speed_diff / optimal_speed)) * 1.8
+```
+
+이 항목의 핵심은 단순히 빠르게 달리게 만드는 것이 아닙니다.
+
+- 직선 구간에서는 빠른 속도 유지
+- 곡선이나 회피 구간에서는 과속 억제
+- 레이싱 라인 설계에서 의도한 속도 프로파일을 학습에 반영
+
+즉, “빠를수록 좋다”가 아니라 “구간에 맞는 속도를 택할수록 좋다”는 구조입니다.
+
+### 6. 방향 패널티와 오프트랙 패널티
+
+차량이 레이싱 라인을 지나가더라도 heading이 지나치게 틀어져 있으면 안정적인 주행으로 보기 어렵습니다. 이를 위해 방향 차이 패널티가 들어 있습니다.
+
+- 차량 방향과 레이싱 라인 진행 방향 차이가 `45도`를 넘으면 전체 reward에 `0.7`을 곱함
+
+또한 안전성과 학습 명확성을 위해 하드 패널티도 둡니다.
+
+- 바퀴가 트랙 밖으로 나가면 즉시 `1e-3`
+- `distance_from_center >= track_width / 2`이면 즉시 `1e-3`
+
+이 부분은 “회복 가능한 실수”와 “즉시 실패로 봐야 하는 상태”를 구분하기 위한 장치입니다.
+
+### 7. 장애물 회피 보상
+
+Object Avoidance 환경에서는 레이싱 라인만 따라가면 성능이 나오지 않았습니다. 그래서 보상함수 안에서 장애물 정보를 별도로 읽어 회피 보상을 추가했습니다.
+
+사용하는 주요 입력은 다음과 같습니다.
+
+- `objects_location`
+- `closest_objects`
+- `objects_left_of_center`
+- `is_left_of_center`
+
+먼저 차량과 다음 장애물 사이의 거리를 계산한 뒤, 현재 차량이 장애물과 같은 차선에 있는지를 판정합니다.
+
+- 같은 차선이면 거리 구간에 따라 보상을 줄이거나 페널티를 줌
+- 다른 차선이면 충돌 가능성이 낮으므로 보상을 더 크게 줌
+
+현재 코드는 같은 차선일 때 다음처럼 거리별로 보상을 조정합니다.
+
+- `0.5 <= distance < 0.8`: `avoid_reward = 0.5`
+- `0.3 <= distance < 0.5`: `avoid_reward = 0.01`
+- `distance < 0.3`: `avoid_reward = 1e-3`
+- 충분히 멀면 `avoid_reward = 1.0`
+
+이 구조는 obstacle을 “보면 피하라”가 아니라 “같은 차선에 가까이 붙을수록 손해”로 학습시키기 위한 것입니다.
+
+### 8. 장애물별 좌우 위치 유도 보상
+
+이 보상함수의 핵심 차별점은 planner처럼 차선을 계산하는 것이 아니라, 특정 장애물 인덱스에서 어느 쪽 위치가 유리한지를 reward로 직접 유도한다는 점입니다.
+
+현재 코드 기준으로는 다음 규칙을 둡니다.
+
+- 0번 장애물: 오른쪽 위치 선호
+- 1번 장애물: 왼쪽 위치 선호
+- 2번 장애물: 오른쪽 위치 선호
+
+이를 위해 `is_left_of_center` 값을 사용해 차량이 현재 왼쪽에 있는지 오른쪽에 있는지를 확인하고, 장애물 인덱스별로 보상을 다르게 부여합니다.
+
+```python
+obstacle_reward = (
+    3.5 * avoid_reward
+    + 2.0 * rewardRight0
+    + 2.0 * rewardLeft1
+    + 2.0 * rewardRight2
+)
+reward += obstacle_reward
+```
+
+이 구조 덕분에 차량은 단순히 장애물을 늦게 피하는 것이 아니라, 더 일찍 유리한 쪽 위치로 이동하도록 학습할 수 있었습니다.
+
+## reward_function.py가 실제로 해결한 문제
+
+실험 과정에서 확인한 핵심 문제와, 보상함수 수준에서 어떻게 대응했는지는 아래와 같습니다.
+
+| 문제 | 단순한 접근 | 실제 한계 | 최종 reward에서의 대응 |
+|---|---|---|---|
+| 레이싱 라인만 따라감 | 최적 라인 근접 보상만 사용 | object 환경에서 장애물 충돌 빈발 | obstacle distance + same-lane 판정 추가 |
+| 장애물을 너무 늦게 회피함 | 충돌 직전 패널티만 부여 | 회피 시작 시점이 늦음 | 장애물별 좌우 위치 유도 보상 추가 |
+| 과속으로 회피 실패 | 빠를수록 보상 | 곡선/장애물 구간 제어 불안정 | 구간별 optimal speed 보상 사용 |
+| 라인은 맞는데 heading이 틀어짐 | 거리만 보상 | zig-zag와 흔들림 발생 | direction difference 패널티 추가 |
+| 학습이 쉽게 과적합됨 | 학습 시간만 증가 | 특정 장애물 패턴만 학습 | reward weight와 조건을 반복 조정 |
+
+## 실험 로그 기반 개선 과정
+
+엑셀로 관리한 실험 기록을 기준으로, 최종 보상함수는 여러 실패를 거쳐 수렴한 결과였습니다.
+
+| 단계 | 모델 | reward 관점의 실험 포인트 | 관찰 | 결론 |
+|---|---|---|---|---|
+| 초기 시도 | `hw01-obj` | `r = 0.9`, continuous action space | Object Avoidance 환경에서 안정성이 부족 | reward 신호가 충분히 명확하지 않았음 |
+| 1차 개선 | `hw02-obj`, `hw02-obj-clone` | discrete action space로 전환 | completion은 높아졌지만 1번 장애물 통과 실패 | 레이싱 라인 보상만으로는 부족 |
+| 중간 개선 | `hw03-obj` ~ `hw09-obj` | discount factor 조정, `r = 0.5`, 속도/조향 세분화 | 라인 추종은 좋아졌지만 object 환경 대응이 불완전 | 회피 보상을 reward 안에 직접 넣어야 함 |
+| 최종 통합 | `integrated1` | 팀원 경로 결과 + OA 보상 변형 + 장애물별 좌우 위치 유도 보상 | `set_speed = 65`에서 안정적 주행, best lap `00:11.5` | 최종 제출 및 수상 모델 |
+| 과적합 검증 | `integrated1-clone-clone` | 동일 구조 장시간 학습 (`9h`) | 첫 번째 장애물 왼쪽 틈으로 파고드는 과적합 발생 | 무작정 오래 학습시키는 것은 역효과 가능 |
+
+## 실험에서 얻은 인사이트
+
+- Object Avoidance 환경에서는 레이싱 라인 추종 reward만으로는 충분하지 않았다.
+- reward 안에서 장애물 거리, 같은 차선 여부, 장애물별 좌우 위치 선호를 직접 분리해 주는 것이 훨씬 효과적이었다.
+- planner 없이도 좌우 위치 선호를 reward로 유도하는 방식이 구현과 튜닝 면에서 단순하고 강력했다.
+- 학습 시간을 늘리는 것보다 reward 구조를 더 명확하게 만드는 것이 성능에 더 큰 영향을 줬다.
+- 장시간 clone 학습은 개선이 아니라 특정 obstacle 패턴에 대한 과적합을 일으킬 수 있었다.
+
+## 최종 검증 환경
+
+최종 reward function을 검증할 때 사용한 대표 설정은 아래와 같습니다.
+
+| 항목 | 값 |
+|---|---|
+| 환경 | AWS DeepRacer Object Avoidance |
+| 최종 모델 | `integrated1` |
+| Action Space | discrete `21` actions |
+| Learning Rate | `0.0003` |
+| Discount Factor | `0.9` |
+| Training Time | `4.5h` |
+| 최고 기록 | `00:11.5` |
+| 실차 기준 | `set_speed = 65`, 약 `12초대` |
 
 ## 액션 스페이스 요약
 
-최종 학습에는 discrete action space를 사용했습니다.
+아래 action space는 최종 reward function을 검증할 때 사용한 학습 설정입니다.
 
 - action 개수: `21`
 - steering 범위: `-30.0 ~ 30.0`
 - speed 범위: `1.3 ~ 3.7544`
-- 특징:
-  - 직진 및 완만한 구간용 고속 action 포함
-  - 회피 및 급조향 구간용 저속 action 포함
-  - steering과 speed를 독립적으로 크게 벌리지 않고 실제 추종 가능한 조합 위주로 구성
 
 <details>
 <summary>사용한 action space 전체 보기</summary>
@@ -113,126 +262,43 @@ drfc.set_model_metadata({
 
 </details>
 
-## 실험 로그 기반 개선 과정
+## 관련 파일
 
-엑셀로 관리한 실험 기록을 기준으로, 최종 보상함수는 한 번에 나온 결과가 아니라 여러 실패와 개선을 거쳐 수렴한 결과였습니다.
-
-| 단계 | 모델 | 실험 포인트 | 관찰 | 결론 |
-|---|---|---|---|---|
-| 초기 시도 | `hw01-obj` | `r = 0.9`, continuous action space 시도 | Object Avoidance 환경에서 안정성이 부족 | continuous action space만으로는 부족 |
-| 1차 개선 | `hw02-obj`, `hw02-obj-clone` | discrete action space로 전환 | completion은 90% 근처까지 갔지만 1번 장애물 통과 실패 | obstacle 전용 보상 필요 |
-| 중간 개선 | `hw03-obj` ~ `hw09-obj` | discount factor 조정, `r = 0.5` 축소, action space 일반화, 속도 오류 수정, 속도/조향 세분화 | 최적 waypoint만으로는 object 환경 대응이 부족함을 확인 | 경로 추종과 회피를 분리하지 말고 함께 설계해야 함 |
-| 최종 통합 | `integrated1` | `yj`의 최적 트랙 추종 + `jh`의 장애물 회피 + 차선 변경 보상 결합 | `set_speed = 65`에서 안정적 주행, best lap `00:11.5`, 실주행 약 12초대 | 최종 제출 및 수상 모델 |
-| 과적합 검증 | `integrated1-clone-clone` | 동일 구조 장시간 학습 (`9h`) | 첫 번째 장애물 왼쪽 틈으로 파고드는 과적합 발생 | 무작정 오래 학습시키는 것은 역효과 가능 |
-| 후속 조정 | `integrated2` | 좌표, 속도, 조향 배열 재배치 | 더 나은 action arrangement 가능성 검증 | 최종 튜닝 방향 재확인 |
-
-## 실험에서 얻은 인사이트
-
-- Object Avoidance 환경에서는 최적 레이싱 라인만 따라가는 reward로는 부족했고, 장애물 위치와 차선 선택을 직접 보상에 반영해야 했다.
-- continuous action space보다 discrete action space가 tuning과 재현성 측면에서 더 유리했다.
-- `r` 값을 줄여 목표 waypoint를 더 공격적으로 잡는 방식은 라인 추종에는 도움이 되었지만, obstacle 상황에서는 회피 보상이 함께 설계되어야 의미가 있었다.
-- 학습 시간을 늘리는 것보다 reward 구조와 action space의 조합을 맞추는 것이 더 중요했다.
-- 장시간 clone 학습은 성능 향상이 아니라 특정 장애물 패턴에 대한 과적합으로 이어질 수 있었다.
-
-## 최종 세팅 요약
-
-최종 제출 모델 기준으로 README에 남길 만한 핵심 설정은 아래와 같습니다.
-
-| 항목 | 값 |
+| 파일 | 의미 |
 |---|---|
-| 환경 | AWS DeepRacer Object Avoidance |
-| 최종 모델 | `integrated1` |
-| Action Space | discrete `21` actions |
-| Steering 범위 | `-30.0 ~ 30.0` |
-| Speed 범위 | `1.3 ~ 3.7544` |
-| Learning Rate | `0.0003` |
-| Discount Factor | `0.9` |
-| Training Time | `4.5h` |
-| 최고 기록 | `00:11.5` |
-| 실차 기준 | `set_speed = 65`, 약 `12초대` |
-
-## 파일별 요약
-
-### `drfc-aws-main/reward_function.py`
-
-이 파일은 제가 직접 담당한 핵심 산출물입니다. 최종 대회용 보상함수이며, 최적 레이싱 라인 추종과 장애물 회피를 하나의 reward 설계로 통합한 결과물입니다.
-
-- 입력: DeepRacer `params`
-- 출력: 스칼라 reward
-- 핵심 역할:
-  - 목표 주행 라인 추종 유도
-  - steering 오차 감소
-  - obstacle 상황에서 lane choice 유도
-  - 안정성과 랩타임 간 균형 확보
-
-### `aws_obj/obj_astar_reward.ipynb`
-
-이 노트북은 최적화 트랙 주행 로직을 만들기 위한 연구용 파일입니다.
-
-- 트랙 `.npy` 로드 및 경계 분석
-- A* + 휴리스틱 기반 레이싱 라인 탐색
-- 속도 프로파일 계산
-- reward 구조 실험 및 검증
-
-### `drfc-aws-main/02_Setup.ipynb`
-
-이 노트북은 최종 보상함수와 함께 사용할 학습 메타데이터를 설정하는 파일입니다.
-
-- reward function 업로드
-- model metadata 설정
-- discrete action space 설정
-- hyperparameter 및 환경 설정
-
-## 저장소 구조
-
-```text
-.
-├── drfc-aws-main
-│   ├── reward_function.py
-│   ├── 02_Setup.ipynb
-│   └── 03_Training.ipynb
-├── aws_obj
-│   └── obj_astar_reward.ipynb
-└── deepracer-vehicle-api-main
-    └── ... 차량 API 및 기타 실험 노트북
-```
-
-## 이 저장소를 읽는 순서
-
-제 담당 범위만 빠르게 확인하려면 아래 순서로 보면 됩니다.
-
-1. [`drfc-aws-main/reward_function.py`](drfc-aws-main/reward_function.py)
-2. [`aws_obj/obj_astar_reward.ipynb`](aws_obj/obj_astar_reward.ipynb)
-3. [`drfc-aws-main/02_Setup.ipynb`](drfc-aws-main/02_Setup.ipynb)
+| [`drfc-aws-main/reward_function.py`](drfc-aws-main/reward_function.py) | 제가 직접 설계한 최종 보상함수 |
+| [`drfc-aws-main/02_Setup.ipynb`](drfc-aws-main/02_Setup.ipynb) | reward를 학습 설정에 연결하는 참고 파일 |
+| [`aws_obj/obj_astar_reward.ipynb`](aws_obj/obj_astar_reward.ipynb) | 팀 차원의 경로 최적화 실험 흔적이 남아 있는 파일이지만, 제 직접 담당 범위는 아님 |
 
 ## 기술 스택
 
 - AWS DeepRacer
 - DeepRacer for Cloud (DRfC)
 - Python
-- A* Search
-- Heuristic Path Planning
 - Reinforcement Learning Reward Design
 
 ## 결과
 
 - 2024 AWS DeepRacer 챔피언십 리그 장려상
-- 최종 보상함수 설계 및 튜닝 완료
+- 최종 제출 모델 `integrated1` 선정
 - 최고 기록 `00:11.5` 확인
 - `set_speed = 65`에서 안정적 주행 확인
 - 실주행 기준 대략 12초대 랩타임 확보
 
 ## 요약
 
-이 프로젝트에서 저는 AWS DeepRacer 워크스페이스 전체 중 `reward_function.py` 설계와 최적화에 집중했습니다.
+이 프로젝트에서 저는 AWS DeepRacer 워크스페이스 전체 중 오직 `reward_function.py` 설계와 튜닝만 담당했습니다.
 
-- A* + 휴리스틱 기반 최적 레이싱 라인 주행 보상 설계
-- AWS 기본 Object Avoidance 코드 변형
-- 차선 변경 보상 추가
-- discrete action space와 보상함수 공동 최적화
-- 실험 로그를 기반으로 실패 원인을 추적하며 구조를 반복 개선
-- 실차에서 안정성과 랩타임을 동시에 확보
+- 팀원이 만든 최적 레이싱 라인 결과를 reward에 통합
+- AWS 기본 Object Avoidance 구조를 대회용으로 변형
+- 장애물 거리, 같은 차선 여부, 장애물별 좌우 위치 선호를 보상으로 설계
+- reward weight와 조건을 반복 조정해 실제 주행 안정성과 기록을 확보
 
+## 프로젝트 영상
+
+<주행 테스트 영상>
+
+https://github.com/user-attachments/assets/1e4781c5-095d-48cf-8009-3d4356a5324a
 
 
 
