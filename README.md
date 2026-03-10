@@ -1,5 +1,14 @@
 # 2024 AWS DeepRacer 자율주행 경진대회
 
+## 프로젝트 영상
+
+<주행 테스트 영상>
+
+https://github.com/user-attachments/assets/1e4781c5-095d-48cf-8009-3d4356a5324a
+
+
+
+
 ## 개요
 
 이 저장소는 AWS DeepRacer 경진대회 워크스페이스 중 제가 직접 담당한 `reward_function.py` 설계와 튜닝 과정을 정리한 포트폴리오 문서입니다.
