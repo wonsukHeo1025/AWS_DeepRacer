@@ -1,4 +1,4 @@
-# AWS DeepRacer 강화학습 보상함수 설계 및 최적화
+# 2024 AWS DeepRacer 자율주행 경진대회
 
 ## 개요
 
@@ -11,7 +11,7 @@
 - `yj`의 A* + 휴리스틱 기반 최적화 트랙 주행 로직
 - `jh`의 AWS 기본 Object Avoidance 코드 변형 + 차선 변경 보상 로직
 
-이 두 접근을 합쳐 최적 레이싱 라인을 안정적으로 따라가면서도 장애물을 회피할 수 있는 보상함수로 정리했고, 해당 세팅으로 장려상을 수상했습니다. 실차 기준 `set_speed = 65`에서 안정적으로 주행 가능했고, 랩타임은 대략 12초대였습니다.
+이 두 접근을 합쳐 최적 레이싱 라인을 안정적으로 따라가면서도 장애물을 회피할 수 있는 보상함수로 정리했고, 해당 세팅으로 장려상을 수상했습니다. 실차 기준 `set_speed = 65`에서 안정적으로 주행 가능했고, 랩타임은 대략 12초대였으며, 실험 로그 기준 최고 기록은 `00:11.5`까지 확인했습니다.
 
 ## 담당 범위
 
@@ -129,6 +129,44 @@ drfc.set_model_metadata({
 
 </details>
 
+## 실험 로그 기반 개선 과정
+
+엑셀로 관리한 실험 기록을 기준으로, 최종 보상함수는 한 번에 나온 결과가 아니라 여러 실패와 개선을 거쳐 수렴한 결과였습니다.
+
+| 단계 | 모델 | 실험 포인트 | 관찰 | 결론 |
+|---|---|---|---|---|
+| 초기 시도 | `hw01-obj` | `r = 0.9`, continuous action space 시도 | Object Avoidance 환경에서 안정성이 부족 | continuous action space만으로는 부족 |
+| 1차 개선 | `hw02-obj`, `hw02-obj-clone` | discrete action space로 전환 | completion은 90% 근처까지 갔지만 1번 장애물 통과 실패 | obstacle 전용 보상 필요 |
+| 중간 개선 | `hw03-obj` ~ `hw09-obj` | discount factor 조정, `r = 0.5` 축소, action space 일반화, 속도 오류 수정, 속도/조향 세분화 | 최적 waypoint만으로는 object 환경 대응이 부족함을 확인 | 경로 추종과 회피를 분리하지 말고 함께 설계해야 함 |
+| 최종 통합 | `integrated1` | `yj`의 최적 트랙 추종 + `jh`의 장애물 회피 + 차선 변경 보상 결합 | `set_speed = 65`에서 안정적 주행, best lap `00:11.5`, 실주행 약 12초대 | 최종 제출 및 수상 모델 |
+| 과적합 검증 | `integrated1-clone-clone` | 동일 구조 장시간 학습 (`9h`) | 첫 번째 장애물 왼쪽 틈으로 파고드는 과적합 발생 | 무작정 오래 학습시키는 것은 역효과 가능 |
+| 후속 조정 | `integrated2` | 좌표, 속도, 조향 배열 재배치 | 더 나은 action arrangement 가능성 검증 | 최종 튜닝 방향 재확인 |
+
+## 실험에서 얻은 인사이트
+
+- Object Avoidance 환경에서는 최적 레이싱 라인만 따라가는 reward로는 부족했고, 장애물 위치와 차선 선택을 직접 보상에 반영해야 했다.
+- continuous action space보다 discrete action space가 tuning과 재현성 측면에서 더 유리했다.
+- `r` 값을 줄여 목표 waypoint를 더 공격적으로 잡는 방식은 라인 추종에는 도움이 되었지만, obstacle 상황에서는 회피 보상이 함께 설계되어야 의미가 있었다.
+- 학습 시간을 늘리는 것보다 reward 구조와 action space의 조합을 맞추는 것이 더 중요했다.
+- 장시간 clone 학습은 성능 향상이 아니라 특정 장애물 패턴에 대한 과적합으로 이어질 수 있었다.
+
+## 최종 세팅 요약
+
+최종 제출 모델 기준으로 README에 남길 만한 핵심 설정은 아래와 같습니다.
+
+| 항목 | 값 |
+|---|---|
+| 환경 | AWS DeepRacer Object Avoidance |
+| 최종 모델 | `integrated1` |
+| Action Space | discrete `21` actions |
+| Steering 범위 | `-30.0 ~ 30.0` |
+| Speed 범위 | `1.3 ~ 3.7544` |
+| Learning Rate | `0.0003` |
+| Discount Factor | `0.9` |
+| Training Time | `4.5h` |
+| 최고 기록 | `00:11.5` |
+| 실차 기준 | `set_speed = 65`, 약 `12초대` |
+
 ## 파일별 요약
 
 ### `drfc-aws-main/reward_function.py`
@@ -198,9 +236,11 @@ drfc.set_model_metadata({
 ## 결과
 
 - 2024 AWS DeepRacer 챔피언십 리그 장려상
+- 최종 제출 모델 `integrated1` 선정
 - 최종 보상함수 설계 및 튜닝 완료
+- 최고 기록 `00:11.5` 확인
 - `set_speed = 65`에서 안정적 주행 확인
-- 대략 12초대 랩타임 확보
+- 실주행 기준 대략 12초대 랩타임 확보
 
 ## 요약
 
@@ -210,7 +250,9 @@ drfc.set_model_metadata({
 - AWS 기본 Object Avoidance 코드 변형
 - 차선 변경 보상 추가
 - discrete action space와 보상함수 공동 최적화
+- 실험 로그를 기반으로 실패 원인을 추적하며 구조를 반복 개선
 - 실차에서 안정성과 랩타임을 동시에 확보
+
 
 
 
